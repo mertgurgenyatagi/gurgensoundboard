@@ -7,14 +7,122 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- Preload audio -->
+    <audio id="launch-sound" preload="auto">
+        <source src="../assets/sounds/launch_sound.wav" type="audio/wav">
+    </audio>
+    
     <!-- Opening animation container -->
     <div id="opening-animation" class="opening-animation">
-        <img src="../assets/images/app_logo.png" alt="Logo" class="logo">
+        <div class="animation-content">
+            <img src="../assets/images/app_logo.svg" alt="Logo" class="logo">
+            <div class="app-title">
+                <span class="title-light">gurgen</span><span class="title-bold">Soundboard</span>
+            </div>
+        </div>
     </div>
     
-    <!-- Main app content (white screen) -->
+    <!-- Main app content -->
     <div id="main-content" class="main-content hidden">
-        <!-- Simple white screen placeholder -->
+        <img src="../assets/images/close.svg" alt="Close" class="close-btn">
+        
+        <!-- Header section -->
+        <div class="header-section">
+            <img src="../assets/images/app_logo.svg" alt="Logo" class="main-logo">
+            <div class="header-text">
+                <div class="main-title">
+                    <span class="normal">gurgen</span><span class="bold">Soundboard</span>
+                </div>
+                <div class="main-description">Lightweight, customizable soundboard app.</div>
+            </div>
+        </div>
+        
+        <!-- Sound slots grid -->
+        <div class="sound-grid">
+            <div class="sound-slot" data-slot="1">
+                <div class="slot-hotkey">
+                    <span class="hotkey-text">-</span>
+                    <img class="hotkey-remove" src="" alt="Remove hotkey" title="Remove hotkey">
+                </div>
+                <img class="slot-remove" src="" alt="Clear slot" title="Clear slot">
+                <img src="../assets/images/slot_empty.svg" alt="Sound" class="slot-icon">
+                <div class="slot-name">Empty Slot</div>
+                <div class="slot-progress"></div>
+            </div>
+            <div class="sound-slot" data-slot="2">
+                <div class="slot-hotkey">
+                    <span class="hotkey-text">-</span>
+                    <img class="hotkey-remove" src="" alt="Remove hotkey" title="Remove hotkey">
+                </div>
+                <img class="slot-remove" src="" alt="Clear slot" title="Clear slot">
+                <img src="../assets/images/slot_empty.svg" alt="Sound" class="slot-icon">
+                <div class="slot-name">Empty Slot</div>
+                <div class="slot-progress"></div>
+            </div>
+            <div class="sound-slot" data-slot="3">
+                <div class="slot-hotkey">
+                    <span class="hotkey-text">-</span>
+                    <img class="hotkey-remove" src="" alt="Remove hotkey" title="Remove hotkey">
+                </div>
+                <img class="slot-remove" src="" alt="Clear slot" title="Clear slot">
+                <img src="../assets/images/slot_empty.svg" alt="Sound" class="slot-icon">
+                <div class="slot-name">Empty Slot</div>
+                <div class="slot-progress"></div>
+            </div>
+            <div class="sound-slot" data-slot="4">
+                <div class="slot-hotkey">
+                    <span class="hotkey-text">-</span>
+                    <img class="hotkey-remove" src="" alt="Remove hotkey" title="Remove hotkey">
+                </div>
+                <img class="slot-remove" src="" alt="Clear slot" title="Clear slot">
+                <img src="../assets/images/slot_empty.svg" alt="Sound" class="slot-icon">
+                <div class="slot-name">Empty Slot</div>
+                <div class="slot-progress"></div>
+            </div>
+            <div class="sound-slot" data-slot="5">
+                <div class="slot-hotkey">
+                    <span class="hotkey-text">-</span>
+                    <img class="hotkey-remove" src="" alt="Remove hotkey" title="Remove hotkey">
+                </div>
+                <img class="slot-remove" src="" alt="Clear slot" title="Clear slot">
+                <img src="../assets/images/slot_empty.svg" alt="Sound" class="slot-icon">
+                <div class="slot-name">Empty Slot</div>
+                <div class="slot-progress"></div>
+            </div>
+            <div class="sound-slot" data-slot="6">
+                <div class="slot-hotkey">
+                    <span class="hotkey-text">-</span>
+                    <img class="hotkey-remove" src="" alt="Remove hotkey" title="Remove hotkey">
+                </div>
+                <img class="slot-remove" src="" alt="Clear slot" title="Clear slot">
+                <img src="../assets/images/slot_empty.svg" alt="Sound" class="slot-icon">
+                <div class="slot-name">Empty Slot</div>
+                <div class="slot-progress"></div>
+            </div>
+            <div class="sound-slot" data-slot="7">
+                <div class="slot-hotkey">
+                    <span class="hotkey-text">-</span>
+                    <img class="hotkey-remove" src="" alt="Remove hotkey" title="Remove hotkey">
+                </div>
+                <img class="slot-remove" src="" alt="Clear slot" title="Clear slot">
+                <img src="../assets/images/slot_empty.svg" alt="Sound" class="slot-icon">
+                <div class="slot-name">Empty Slot</div>
+                <div class="slot-progress"></div>
+            </div>
+            <div class="sound-slot" data-slot="8">
+                <div class="slot-hotkey">
+                    <span class="hotkey-text">-</span>
+                    <img class="hotkey-remove" src="" alt="Remove hotkey" title="Remove hotkey">
+                </div>
+                <img class="slot-remove" src="" alt="Clear slot" title="Clear slot">
+                <img src="../assets/images/slot_empty.svg" alt="Sound" class="slot-icon">
+                <div class="slot-name">Empty Slot</div>
+                <div class="slot-progress"></div>
+            </div>
+        </div>
+        
+        <!-- Footer hint -->
+        <div class="footer-hint">Click to play • Right-click to assign sound • Click hotkey badge to set key</div>
     </div>
 
     <script src="script.js"></script>
