@@ -1,326 +1,370 @@
-// Opening animation controller
+/**
+ * gurgenSoundboard - UI Script
+ * Completely rewritten from scratch for reliability
+ * 
+ * RULES:
+ * - Left click on slot: ONLY plays sound (if assigned)
+ * - Right click on slot: ONLY opens file browser (if slot is empty)
+ * - Click on hotkey badge: Enter hotkey assignment mode
+ * - Click on X button: Clear the slot
+ */
+
 document.addEventListener('DOMContentLoaded', function() {
+    // ========================================
+    // ELEMENTS
+    // ========================================
     const openingAnimation = document.getElementById('opening-animation');
     const mainContent = document.getElementById('main-content');
     const closeBtn = document.querySelector('.close-btn');
     const soundSlots = document.querySelectorAll('.sound-slot');
     
-    // Sound slot data storage
-    const slotData = {};
-    // Hotkey to slot mapping
-    const hotkeyMap = {};
-    // Slot waiting for hotkey assignment
-    let pendingHotkeySlot = null;
-    // Currently playing sounds
-    const playingSounds = {};
+    // ========================================
+    // STATE - Simple and clear
+    // ========================================
+    const slotData = {};        // {slotNum: {path, name, hotkey}}
+    const hotkeyMap = {};       // {key: slotNum} for visual feedback
+    let awaitingHotkey = null;  // {slotNum, element} or null
     
-    // Set removal icon sources
-    document.querySelectorAll('.slot-remove, .hotkey-remove').forEach(img => {
-        img.src = window.SLOT_REMOVAL_ICON;
+    // ========================================
+    // INITIALIZATION
+    // ========================================
+    
+    // Set removal icons
+    document.querySelectorAll('.slot-remove, .hotkey-remove').forEach(function(img) {
+        if (window.SLOT_REMOVAL_ICON) {
+            img.src = window.SLOT_REMOVAL_ICON;
+        }
     });
     
-    // Close button functionality
+    // Close button - hide window
     if (closeBtn) {
         closeBtn.addEventListener('click', function() {
-            if (window.pywebview) {
+            if (window.pywebview && window.pywebview.api) {
                 window.pywebview.api.hide_window();
             }
         });
     }
     
-    // Load saved slot data
-    function loadSlotData() {
-        if (window.pywebview) {
-            window.pywebview.api.get_slots().then(slots => {
-                if (slots) {
-                    Object.keys(slots).forEach(slotNum => {
-                        const slotInfo = slots[slotNum];
-                        slotData[slotNum] = slotInfo;
-                        
-                        const slot = document.querySelector(`.sound-slot[data-slot="${slotNum}"]`);
-                        if (slot) {
-                            if (slotInfo.name) {
-                                const nameEl = slot.querySelector('.slot-name');
-                                nameEl.textContent = slotInfo.name;
-                                const iconEl = slot.querySelector('.slot-icon');
-                                iconEl.setAttribute('src', window.SLOT_FILLED_ICON);
-                                iconEl.style.opacity = '0.8';
-                            }
-                            if (slotInfo.hotkey) {
-                                const hotkeyEl = slot.querySelector('.slot-hotkey .hotkey-text');
-                                hotkeyEl.textContent = slotInfo.hotkey.toUpperCase();
-                                hotkeyMap[slotInfo.hotkey.toLowerCase()] = slotNum;
-                            }
-                        }
-                    });
-                }
-            });
-        }
-    }
-    
-    // Sound slot click handlers
-    soundSlots.forEach(slot => {
-        // Left click - play sound
-        slot.addEventListener('click', function(e) {
-            // Don't play if clicking hotkey badge or remove buttons
-            if (e.target.closest('.slot-hotkey') || e.target.closest('.slot-remove')) return;
-            
-            const slotNum = this.dataset.slot;
-            playSlotSound(slotNum, this);
-        });
-        
-        // Right click - assign sound
-        slot.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            const slotNum = this.dataset.slot;
-            assignSound(slotNum, this);
-        });
-        
-        // Hotkey badge click - assign hotkey
-        const hotkeyBadge = slot.querySelector('.slot-hotkey');
-        hotkeyBadge.addEventListener('click', function(e) {
-            e.stopPropagation();
-            // If clicking the remove button, don't assign hotkey
-            if (e.target.closest('.hotkey-remove')) return;
-            const slotNum = slot.dataset.slot;
-            startHotkeyAssignment(slotNum, slot);
-        });
-        
-        // Hotkey remove button
-        const hotkeyRemove = slot.querySelector('.hotkey-remove');
-        hotkeyRemove.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const slotNum = slot.dataset.slot;
-            removeHotkey(slotNum, slot);
-        });
-        
-        // Slot remove button
-        const slotRemove = slot.querySelector('.slot-remove');
-        slotRemove.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const slotNum = slot.dataset.slot;
-            clearSlot(slotNum, slot);
-        });
-    });
-    
-    // Keyboard handler
-    document.addEventListener('keydown', function(e) {
-        const key = e.key.toLowerCase();
-        
-        // If waiting for hotkey assignment
-        if (pendingHotkeySlot) {
-            e.preventDefault();
-            assignHotkey(pendingHotkeySlot.slotNum, pendingHotkeySlot.element, key);
+    // ========================================
+    // LOAD SAVED DATA
+    // ========================================
+    function loadSavedSlots() {
+        if (!window.pywebview || !window.pywebview.api) {
+            console.log('pywebview not ready, retrying...');
+            setTimeout(loadSavedSlots, 100);
             return;
         }
         
-        // Check if this key is mapped to a slot
+        window.pywebview.api.get_slots().then(function(slots) {
+            if (!slots) return;
+            
+            Object.keys(slots).forEach(function(slotNum) {
+                const info = slots[slotNum];
+                slotData[slotNum] = info;
+                
+                const slotEl = document.querySelector('.sound-slot[data-slot="' + slotNum + '"]');
+                if (!slotEl) return;
+                
+                // Update name
+                if (info.name) {
+                    slotEl.querySelector('.slot-name').textContent = info.name;
+                    slotEl.querySelector('.slot-icon').src = window.SLOT_FILLED_ICON;
+                    slotEl.querySelector('.slot-icon').style.opacity = '0.8';
+                }
+                
+                // Update hotkey display
+                if (info.hotkey) {
+                    slotEl.querySelector('.slot-hotkey .hotkey-text').textContent = info.hotkey.toUpperCase();
+                    hotkeyMap[info.hotkey.toLowerCase()] = slotNum;
+                }
+            });
+            
+            console.log('Loaded slots:', Object.keys(slotData).length);
+        });
+    }
+    
+    // ========================================
+    // SLOT EVENT HANDLERS - COMPLETELY SEPARATE
+    // ========================================
+    soundSlots.forEach(function(slot) {
+        const slotNum = slot.dataset.slot;
+        
+        // ----------------------------------------
+        // LEFT CLICK - PLAY SOUND ONLY
+        // ----------------------------------------
+        slot.addEventListener('click', function(e) {
+            // Ignore if clicking on hotkey badge or remove button
+            if (e.target.closest('.slot-hotkey')) return;
+            if (e.target.closest('.slot-remove')) return;
+            
+            // Only play if slot has a sound
+            if (!slotData[slotNum] || !slotData[slotNum].path) {
+                console.log('Slot ' + slotNum + ' has no sound');
+                return;
+            }
+            
+            // Play the sound
+            playSound(slotNum, slot);
+        });
+        
+        // ----------------------------------------
+        // RIGHT CLICK - BROWSE FOR SOUND ONLY
+        // ----------------------------------------
+        slot.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Check if slot already has a sound
+            if (slotData[slotNum] && slotData[slotNum].path) {
+                // Slot is filled - show error feedback
+                console.log('Slot ' + slotNum + ' already has a sound. Clear it first.');
+                slot.style.boxShadow = '0 0 20px rgba(255, 50, 50, 0.6)';
+                setTimeout(function() {
+                    slot.style.boxShadow = '';
+                }, 300);
+                return;
+            }
+            
+            // Browse for sound
+            browseForSound(slotNum, slot);
+        });
+        
+        // ----------------------------------------
+        // HOTKEY BADGE CLICK - ASSIGN HOTKEY
+        // ----------------------------------------
+        const hotkeyBadge = slot.querySelector('.slot-hotkey');
+        if (hotkeyBadge) {
+            hotkeyBadge.addEventListener('click', function(e) {
+                e.stopPropagation();
+                
+                // Ignore if clicking remove button
+                if (e.target.closest('.hotkey-remove')) return;
+                
+                startHotkeyAssignment(slotNum, slot);
+            });
+        }
+        
+        // ----------------------------------------
+        // HOTKEY REMOVE BUTTON
+        // ----------------------------------------
+        const hotkeyRemove = slot.querySelector('.hotkey-remove');
+        if (hotkeyRemove) {
+            hotkeyRemove.addEventListener('click', function(e) {
+                e.stopPropagation();
+                removeHotkey(slotNum, slot);
+            });
+        }
+        
+        // ----------------------------------------
+        // SLOT REMOVE BUTTON (CLEAR SLOT)
+        // ----------------------------------------
+        const slotRemove = slot.querySelector('.slot-remove');
+        if (slotRemove) {
+            slotRemove.addEventListener('click', function(e) {
+                e.stopPropagation();
+                clearSlot(slotNum, slot);
+            });
+        }
+    });
+    
+    // ========================================
+    // KEYBOARD HANDLER
+    // ========================================
+    document.addEventListener('keydown', function(e) {
+        // If waiting for hotkey assignment
+        if (awaitingHotkey) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const key = e.key.toLowerCase();
+            assignHotkey(awaitingHotkey.slotNum, awaitingHotkey.element, key);
+            return;
+        }
+        
+        // Visual feedback for registered hotkeys (actual playing is done by Python)
+        const key = e.key.toLowerCase();
         if (hotkeyMap[key]) {
             const slotNum = hotkeyMap[key];
-            const slot = document.querySelector(`.sound-slot[data-slot="${slotNum}"]`);
+            const slot = document.querySelector('.sound-slot[data-slot="' + slotNum + '"]');
             if (slot) {
-                // If sound is already playing, stop it
-                if (playingSounds[slotNum]) {
-                    stopSlotSound(slotNum, slot);
-                } else {
-                    playSlotSound(slotNum, slot);
-                    // Visual feedback for keypress
-                    slot.style.transform = 'translateY(-2px) scale(0.98)';
-                    setTimeout(() => {
-                        slot.style.transform = '';
-                    }, 100);
-                }
+                slot.style.transform = 'translateY(-2px) scale(0.98)';
+                setTimeout(function() {
+                    slot.style.transform = '';
+                }, 100);
             }
         }
     });
     
-    // Start hotkey assignment mode
-    function startHotkeyAssignment(slotNum, slotElement) {
-        // Remove previous pending state
-        if (pendingHotkeySlot) {
-            pendingHotkeySlot.element.classList.remove('awaiting-hotkey');
+    // Cancel hotkey assignment on outside click
+    document.addEventListener('click', function(e) {
+        if (awaitingHotkey && !e.target.closest('.sound-slot')) {
+            cancelHotkeyAssignment();
         }
-        
-        pendingHotkeySlot = { slotNum, element: slotElement };
-        slotElement.classList.add('awaiting-hotkey');
-        
-        const hotkeyEl = slotElement.querySelector('.slot-hotkey .hotkey-text');
-        hotkeyEl.textContent = '?';
-    }
+    });
     
-    // Remove hotkey from slot
-    function removeHotkey(slotNum, slotElement) {
-        // Remove from mapping
-        Object.keys(hotkeyMap).forEach(k => {
-            if (hotkeyMap[k] === slotNum) {
-                delete hotkeyMap[k];
+    // ========================================
+    // FUNCTIONS
+    // ========================================
+    
+    function playSound(slotNum, slotEl) {
+        if (!window.pywebview || !window.pywebview.api) return;
+        
+        window.pywebview.api.play_sound(slotNum).then(function(result) {
+            console.log('Play result:', result);
+            if (result.status === 'playing') {
+                slotEl.classList.add('playing');
+            } else {
+                slotEl.classList.remove('playing');
             }
         });
+    }
+    
+    function browseForSound(slotNum, slotEl) {
+        if (!window.pywebview || !window.pywebview.api) return;
         
-        // Update display
-        const hotkeyEl = slotElement.querySelector('.slot-hotkey .hotkey-text');
-        hotkeyEl.textContent = '-';
+        window.pywebview.api.browse_for_sound().then(function(result) {
+            if (!result || !result.path) {
+                console.log('No file selected');
+                return;
+            }
+            
+            console.log('Selected file:', result);
+            
+            // Update local state
+            slotData[slotNum] = slotData[slotNum] || {};
+            slotData[slotNum].path = result.path;
+            slotData[slotNum].name = result.name;
+            
+            // Update UI
+            slotEl.querySelector('.slot-name').textContent = result.name;
+            slotEl.querySelector('.slot-icon').src = window.SLOT_FILLED_ICON;
+            slotEl.querySelector('.slot-icon').style.opacity = '0.8';
+            
+            // Save to backend
+            window.pywebview.api.assign_sound_to_slot(slotNum, result.path, result.name);
+        });
+    }
+    
+    function startHotkeyAssignment(slotNum, slotEl) {
+        // Cancel any previous assignment
+        if (awaitingHotkey) {
+            awaitingHotkey.element.classList.remove('awaiting-hotkey');
+        }
         
-        // Update backend
-        if (window.pywebview) {
-            window.pywebview.api.set_hotkey(slotNum, null);
+        awaitingHotkey = { slotNum: slotNum, element: slotEl };
+        slotEl.classList.add('awaiting-hotkey');
+        slotEl.querySelector('.slot-hotkey .hotkey-text').textContent = '?';
+    }
+    
+    function cancelHotkeyAssignment() {
+        if (!awaitingHotkey) return;
+        
+        const slotNum = awaitingHotkey.slotNum;
+        const slotEl = awaitingHotkey.element;
+        
+        slotEl.classList.remove('awaiting-hotkey');
+        
+        // Restore previous hotkey display
+        const existingHotkey = slotData[slotNum] && slotData[slotNum].hotkey;
+        slotEl.querySelector('.slot-hotkey .hotkey-text').textContent = existingHotkey ? existingHotkey.toUpperCase() : '-';
+        
+        awaitingHotkey = null;
+    }
+    
+    function assignHotkey(slotNum, slotEl, key) {
+        // Remove from old slot if this key was used elsewhere
+        if (hotkeyMap[key] && hotkeyMap[key] !== slotNum) {
+            const oldSlotNum = hotkeyMap[key];
+            const oldSlot = document.querySelector('.sound-slot[data-slot="' + oldSlotNum + '"]');
+            if (oldSlot) {
+                oldSlot.querySelector('.slot-hotkey .hotkey-text').textContent = '-';
+            }
+            if (slotData[oldSlotNum]) {
+                slotData[oldSlotNum].hotkey = '';
+            }
+            // Update backend for old slot
+            if (window.pywebview && window.pywebview.api) {
+                window.pywebview.api.set_slot_hotkey(oldSlotNum, null);
+            }
+        }
+        
+        // Remove old hotkey from this slot
+        if (slotData[slotNum] && slotData[slotNum].hotkey) {
+            delete hotkeyMap[slotData[slotNum].hotkey];
+        }
+        
+        // Set new hotkey
+        slotData[slotNum] = slotData[slotNum] || {};
+        slotData[slotNum].hotkey = key;
+        hotkeyMap[key] = slotNum;
+        
+        // Update UI
+        slotEl.classList.remove('awaiting-hotkey');
+        slotEl.querySelector('.slot-hotkey .hotkey-text').textContent = key.toUpperCase();
+        
+        awaitingHotkey = null;
+        
+        // Save to backend
+        if (window.pywebview && window.pywebview.api) {
+            window.pywebview.api.set_slot_hotkey(slotNum, key);
         }
     }
     
-    // Clear slot (remove sound)
-    function clearSlot(slotNum, slotElement) {
-        // Stop sound if playing
-        if (playingSounds[slotNum]) {
-            stopSlotSound(slotNum, slotElement);
+    function removeHotkey(slotNum, slotEl) {
+        // Remove from map
+        if (slotData[slotNum] && slotData[slotNum].hotkey) {
+            delete hotkeyMap[slotData[slotNum].hotkey];
+            slotData[slotNum].hotkey = '';
         }
         
-        // Clear data
+        // Update UI
+        slotEl.querySelector('.slot-hotkey .hotkey-text').textContent = '-';
+        
+        // Save to backend
+        if (window.pywebview && window.pywebview.api) {
+            window.pywebview.api.set_slot_hotkey(slotNum, null);
+        }
+    }
+    
+    function clearSlot(slotNum, slotEl) {
+        // Remove hotkey from map
+        if (slotData[slotNum] && slotData[slotNum].hotkey) {
+            delete hotkeyMap[slotData[slotNum].hotkey];
+        }
+        
+        // Clear local state
         delete slotData[slotNum];
         
-        // Update display
-        const nameEl = slotElement.querySelector('.slot-name');
-        nameEl.textContent = 'Empty Slot';
-        const iconEl = slotElement.querySelector('.slot-icon');
-        iconEl.setAttribute('src', window.SLOT_EMPTY_ICON);
-        iconEl.style.opacity = '0.6';
+        // Update UI
+        slotEl.querySelector('.slot-name').textContent = 'Empty Slot';
+        slotEl.querySelector('.slot-icon').src = window.SLOT_EMPTY_ICON;
+        slotEl.querySelector('.slot-icon').style.opacity = '0.6';
+        slotEl.querySelector('.slot-hotkey .hotkey-text').textContent = '-';
+        slotEl.classList.remove('playing');
         
-        // Update backend
-        if (window.pywebview) {
+        // Save to backend
+        if (window.pywebview && window.pywebview.api) {
             window.pywebview.api.clear_slot(slotNum);
         }
     }
     
-    // Assign hotkey to slot
-    function assignHotkey(slotNum, slotElement, key) {
-        // Remove old mapping if exists
-        Object.keys(hotkeyMap).forEach(k => {
-            if (hotkeyMap[k] === slotNum) {
-                delete hotkeyMap[k];
-            }
-        });
-        
-        // Check if key is already used by another slot
-        if (hotkeyMap[key]) {
-            const oldSlotNum = hotkeyMap[key];
-            const oldSlot = document.querySelector(`.sound-slot[data-slot="${oldSlotNum}"]`);
-            if (oldSlot) {
-                oldSlot.querySelector('.slot-hotkey .hotkey-text').textContent = '-';
-            }
-            // Update old slot in backend
-            if (window.pywebview) {
-                window.pywebview.api.set_hotkey(oldSlotNum, null);
-            }
-        }
-        
-        // Set new mapping
-        hotkeyMap[key] = slotNum;
-        
-        const hotkeyEl = slotElement.querySelector('.slot-hotkey .hotkey-text');
-        hotkeyEl.textContent = key.toUpperCase();
-        
-        slotElement.classList.remove('awaiting-hotkey');
-        pendingHotkeySlot = null;
-        
-        // Save to backend
-        if (window.pywebview) {
-            window.pywebview.api.set_hotkey(slotNum, key);
-        }
-    }
-    
-    // Stop sound for a slot
-    function stopSlotSound(slotNum, slotElement) {
-        if (window.pywebview) {
-            window.pywebview.api.stop_sound();
-        }
-        
-        // Clear playing state
-        delete playingSounds[slotNum];
-        slotElement.classList.remove('playing');
-        
-        // Reset progress bar
-        const progressBar = slotElement.querySelector('.slot-progress');
-        progressBar.style.transition = 'none';
-        progressBar.style.width = '0%';
-    }
-    
-    // Play sound for a slot
-    function playSlotSound(slotNum, slotElement) {
-        if (window.pywebview) {
-            // Add playing class
-            slotElement.classList.add('playing');
-            playingSounds[slotNum] = true;
+    // ========================================
+    // OPENING ANIMATION
+    // ========================================
+    setTimeout(function() {
+        if (openingAnimation) {
+            openingAnimation.classList.add('fade-out');
             
-            window.pywebview.api.play_slot_sound(slotNum).then(duration => {
-                if (duration > 0) {
-                    // Animate progress bar
-                    const progressBar = slotElement.querySelector('.slot-progress');
-                    progressBar.style.transition = `width ${duration}ms linear`;
-                    progressBar.style.width = '100%';
-                    
-                    setTimeout(() => {
-                        delete playingSounds[slotNum];
-                        slotElement.classList.remove('playing');
-                        progressBar.style.transition = 'none';
-                        progressBar.style.width = '0%';
-                    }, duration);
-                } else {
-                    delete playingSounds[slotNum];
-                    slotElement.classList.remove('playing');
-                    // No sound assigned, prompt to assign
-                    assignSound(slotNum, slotElement);
+            setTimeout(function() {
+                openingAnimation.style.display = 'none';
+                if (mainContent) {
+                    mainContent.classList.remove('hidden');
+                    mainContent.classList.add('visible');
                 }
-            });
+                
+                // Load saved data after animation
+                loadSavedSlots();
+            }, 300);
         }
-    }
-    
-    // Assign sound to a slot
-    function assignSound(slotNum, slotElement) {
-        if (window.pywebview) {
-            window.pywebview.api.open_file_dialog().then(result => {
-                if (result && result.path) {
-                    slotData[slotNum] = result;
-                    
-                    // Save to Python backend
-                    window.pywebview.api.assign_sound(slotNum, result.path, result.name);
-                    
-                    // Update slot display
-                    const nameEl = slotElement.querySelector('.slot-name');
-                    nameEl.textContent = result.name;
-                    
-                    // Update icon to show it has a sound
-                    const iconEl = slotElement.querySelector('.slot-icon');
-                    iconEl.setAttribute('src', window.SLOT_FILLED_ICON);
-                    iconEl.style.opacity = '0.8';
-                }
-            });
-        }
-    }
-    
-    // Cancel hotkey assignment on click outside
-    document.addEventListener('click', function(e) {
-        if (pendingHotkeySlot && !e.target.closest('.sound-slot')) {
-            pendingHotkeySlot.element.classList.remove('awaiting-hotkey');
-            const hotkeyEl = pendingHotkeySlot.element.querySelector('.slot-hotkey');
-            const slotNum = pendingHotkeySlot.slotNum;
-            // Restore previous hotkey or show dash
-            const previousKey = Object.keys(hotkeyMap).find(k => hotkeyMap[k] === slotNum);
-            hotkeyEl.textContent = previousKey ? previousKey.toUpperCase() : '-';
-            pendingHotkeySlot = null;
-        }
-    });
-    
-    // After 2 seconds, hide opening animation and show main content
-    setTimeout(() => {
-        openingAnimation.classList.add('fade-out');
-        
-        // Wait for fade-out transition to complete
-        setTimeout(() => {
-            openingAnimation.style.display = 'none';
-            mainContent.classList.remove('hidden');
-            mainContent.classList.add('visible');
-            
-            // Load saved slot data after main content is visible
-            loadSlotData();
-        }, 300);
-    }, 2000); // 2 second animation duration
+    }, 2000);
 });
